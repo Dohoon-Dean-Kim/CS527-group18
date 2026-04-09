@@ -23,7 +23,7 @@ This is intentionally a simple baseline, but it gives you a clean place to itera
 
 ## Run with uv
 
-`uv` is not installed in the current environment yet, but the project is set up for it:
+The project is set up to run directly with `uv`:
 
 ```bash
 uv sync
