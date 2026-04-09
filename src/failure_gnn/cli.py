@@ -11,7 +11,7 @@ import torch
 from torch import nn
 
 from failure_gnn.data import (
-    NUMERIC_FEATURES,
+    FeatureSchema,
     describe_split,
     fit_scaler,
     load_graphs,
@@ -29,6 +29,7 @@ class Metrics:
     precision: float
     recall: float
     f1: float
+    threshold: float
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,9 +67,9 @@ def stack_project_embeddings(projects: tuple[str, ...], embedding_map: dict[str,
     return torch.stack([embedding_map[project] for project in projects], dim=0)
 
 
-def compute_metrics(logits: torch.Tensor, labels: torch.Tensor, loss: torch.Tensor) -> Metrics:
+def compute_metrics(logits: torch.Tensor, labels: torch.Tensor, loss: torch.Tensor, threshold: float) -> Metrics:
     probabilities = torch.sigmoid(logits)
-    predictions = (probabilities >= 0.5).float()
+    predictions = (probabilities >= threshold).float()
     true_positive = float(((predictions == 1) & (labels == 1)).sum().item())
     true_negative = float(((predictions == 0) & (labels == 0)).sum().item())
     false_positive = float(((predictions == 1) & (labels == 0)).sum().item())
@@ -87,7 +88,29 @@ def compute_metrics(logits: torch.Tensor, labels: torch.Tensor, loss: torch.Tens
         precision=precision,
         recall=recall,
         f1=f1,
+        threshold=threshold,
     )
+
+
+def select_best_threshold(logits: torch.Tensor, labels: torch.Tensor) -> float:
+    thresholds = np.linspace(0.2, 0.8, 25)
+    best_threshold = 0.5
+    best_score = -1.0
+    best_precision = -1.0
+    probabilities = torch.sigmoid(logits)
+    for threshold in thresholds:
+        predictions = (probabilities >= float(threshold)).float()
+        true_positive = float(((predictions == 1) & (labels == 1)).sum().item())
+        false_positive = float(((predictions == 1) & (labels == 0)).sum().item())
+        false_negative = float(((predictions == 0) & (labels == 1)).sum().item())
+        precision = true_positive / max(1.0, true_positive + false_positive)
+        recall = true_positive / max(1.0, true_positive + false_negative)
+        score = 0.0 if precision + recall == 0 else (2.0 * precision * recall / (precision + recall))
+        if score > best_score or (score == best_score and precision > best_precision):
+            best_score = score
+            best_precision = precision
+            best_threshold = float(threshold)
+    return best_threshold
 
 
 def evaluate(
@@ -96,6 +119,7 @@ def evaluate(
     graphs: dict[str, object],
     split,
     loss_fn: nn.Module,
+    threshold: float,
 ) -> Metrics:
     encoder.eval()
     classifier.eval()
@@ -104,7 +128,7 @@ def evaluate(
         graph_embeddings = stack_project_embeddings(split.projects, embeddings)
         logits = classifier(graph_embeddings, split.build_features)
         loss = loss_fn(logits, split.labels)
-        return compute_metrics(logits, split.labels, loss)
+        return compute_metrics(logits, split.labels, loss, threshold)
 
 
 def save_outputs(
@@ -114,6 +138,7 @@ def save_outputs(
     metrics_payload: dict[str, object],
     scaler_mean: np.ndarray,
     scaler_std: np.ndarray,
+    feature_names: tuple[str, ...],
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -122,7 +147,7 @@ def save_outputs(
             "classifier_state_dict": classifier.state_dict(),
             "feature_mean": scaler_mean.tolist(),
             "feature_std": scaler_std.tolist(),
-            "numeric_features": list(NUMERIC_FEATURES),
+            "feature_names": list(feature_names),
         },
         output_dir / "model.pt",
     )
@@ -134,7 +159,7 @@ def main() -> None:
     set_seed(args.seed)
 
     graphs = load_graphs(args.graphs_dir)
-    rows = read_build_rows(args.dataset_path, set(graphs), target_mode=args.target)
+    rows, schema = read_build_rows(args.dataset_path, graphs, target_mode=args.target)
     train_rows, val_rows, test_rows = temporal_split(rows)
     scaler = fit_scaler(train_rows)
     train_split = rows_to_tensors(train_rows, scaler)
@@ -144,7 +169,7 @@ def main() -> None:
     encoder = GraphEncoder(in_dim=4, hidden_dim=args.hidden_dim, dropout=args.dropout)
     classifier = BuildClassifier(
         graph_dim=args.hidden_dim,
-        build_feature_dim=len(NUMERIC_FEATURES),
+        build_feature_dim=train_split.build_features.shape[1],
         hidden_dim=args.hidden_dim,
         dropout=args.dropout,
     )
@@ -162,6 +187,7 @@ def main() -> None:
     best_state = None
     best_val_loss = float("inf")
     epochs_without_improvement = 0
+    best_threshold = 0.5
 
     for epoch in range(1, args.epochs + 1):
         encoder.train()
@@ -175,13 +201,22 @@ def main() -> None:
         train_loss.backward()
         optimizer.step()
 
-        train_metrics = compute_metrics(train_logits.detach(), train_split.labels, train_loss.detach())
-        val_metrics = evaluate(encoder, classifier, graphs, val_split, loss_fn)
+        with torch.no_grad():
+            encoder.eval()
+            classifier.eval()
+            val_embedding_map = build_project_embeddings(encoder, graphs)
+            val_graph_embeddings = stack_project_embeddings(val_split.projects, val_embedding_map)
+            val_logits = classifier(val_graph_embeddings, val_split.build_features)
+            val_loss = loss_fn(val_logits, val_split.labels)
+            epoch_threshold = select_best_threshold(val_logits, val_split.labels)
+        train_metrics = compute_metrics(train_logits.detach(), train_split.labels, train_loss.detach(), epoch_threshold)
+        val_metrics = compute_metrics(val_logits, val_split.labels, val_loss, epoch_threshold)
 
         print(
             f"epoch={epoch:03d} "
             f"train_loss={train_metrics.loss:.4f} train_f1={train_metrics.f1:.3f} "
-            f"val_loss={val_metrics.loss:.4f} val_f1={val_metrics.f1:.3f}"
+            f"val_loss={val_metrics.loss:.4f} val_f1={val_metrics.f1:.3f} "
+            f"threshold={epoch_threshold:.2f}"
         )
 
         if val_metrics.loss < best_val_loss:
@@ -191,6 +226,7 @@ def main() -> None:
                 "classifier": classifier.state_dict(),
                 "epoch": epoch,
             }
+            best_threshold = epoch_threshold
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
@@ -204,9 +240,9 @@ def main() -> None:
     encoder.load_state_dict(best_state["encoder"])
     classifier.load_state_dict(best_state["classifier"])
 
-    final_train_metrics = evaluate(encoder, classifier, graphs, train_split, loss_fn)
-    final_val_metrics = evaluate(encoder, classifier, graphs, val_split, loss_fn)
-    final_test_metrics = evaluate(encoder, classifier, graphs, test_split, loss_fn)
+    final_train_metrics = evaluate(encoder, classifier, graphs, train_split, loss_fn, best_threshold)
+    final_val_metrics = evaluate(encoder, classifier, graphs, val_split, loss_fn, best_threshold)
+    final_test_metrics = evaluate(encoder, classifier, graphs, test_split, loss_fn, best_threshold)
 
     metrics_payload = {
         "config": {
@@ -220,7 +256,8 @@ def main() -> None:
             "learning_rate": args.learning_rate,
             "weight_decay": args.weight_decay,
             "seed": args.seed,
-            "numeric_features": list(NUMERIC_FEATURES),
+            "decision_threshold": best_threshold,
+            "feature_names": list(schema.feature_names),
         },
         "splits": {
             "train": describe_split(train_split),
@@ -235,7 +272,7 @@ def main() -> None:
     }
 
     output_dir = Path(args.output_dir)
-    save_outputs(output_dir, encoder, classifier, metrics_payload, scaler.mean, scaler.std)
+    save_outputs(output_dir, encoder, classifier, metrics_payload, scaler.mean, scaler.std, schema.feature_names)
 
     print(json.dumps(metrics_payload["metrics"], indent=2))
     print(f"saved outputs to {output_dir}")
