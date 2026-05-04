@@ -2,100 +2,84 @@
 
 \subsection{Approach Overview}
 % [proposal] Describe different components and stages of your technique using text/figure/example/flowchart/etc. 
-Our proposed technique, GNN TCP, consists of three main stages. First is Graph Construction, where we parse the source code and test suite to build a Code Dependency Graph (CDG) representing the relationships between methods and tests. Second is Change Embedding, where we map the specific code changes from the current commit onto the graph nodes. Third is Failure Prediction, where a Graph Neural Network propagates the impact features of the changed nodes across the graph to predict the failure probability of test nodes.
+Our initial design was a test-level GNN-TCP system: construct a graph connecting changed methods to covered tests, propagate change impact through the graph, and rank tests by predicted failure probability. In practice, robust method-level dynamic coverage was not available for the full LRTS setting. The implemented technique is therefore a static build-failure baseline. It has three stages: (1) construct one static call graph per project, (2) encode each project graph using a two-layer Graph Convolutional Network (GCN), and (3) concatenate the resulting project embedding with per-build CI metadata to predict whether a build contains at least one failing test class.
+
+\subsection{Static Graph Construction}
+
+For each project $p$, we represent the source code as a static directed call graph
+\[
+G_p=(V_p,E_p),
+\]
+where each node $v\in V_p$ is a method and each directed edge $(u,v)\in E_p$ indicates that method $u$ invokes method $v$. The graph is extracted from Java Abstract Syntax Trees by identifying \texttt{MethodDeclaration} and \texttt{MethodInvocation} nodes.
+
+Let $d^-_v$ and $d^+_v$ denote the in-degree and out-degree of node $v$ in the directed call graph. The implemented node feature vector is purely structural:
+\[
+x_v =
+\begin{bmatrix}
+\log(1+d^-_v) &
+\log(1+d^+_v) &
+\log(1+d^-_v+d^+_v) &
+1
+\end{bmatrix}.
+\]
+Stacking all node features gives $X_p\in\mathbb{R}^{|V_p|\times 4}$.
+
+Although the extracted call graph is directed, the current implementation symmetrizes it before message passing. If $A_p$ is the directed adjacency matrix, the model uses
+\[
+\tilde{A}_p = A_p + A_p^\top + I,
+\]
+where $I$ adds self-loops. It then applies symmetric normalization
+\[
+\hat{A}_p = \tilde{D}_p^{-1/2}\tilde{A}_p\tilde{D}_p^{-1/2},
+\qquad
+\tilde{D}_{p,ii}=\sum_j \tilde{A}_{p,ij}.
+\]
+This normalization is mathematically standard for GCNs, but it also removes caller-callee directionality, which later becomes an important limitation.
+
+\subsection{GCN Build Failure Model}
+
+The graph encoder uses two graph convolution layers:
+\[
+H_p^{(1)}=\operatorname{ReLU}(\hat{A}_pX_pW_0+b_0),
+\]
+\[
+H_p^{(2)}=\operatorname{ReLU}(\hat{A}_pH_p^{(1)}W_1+b_1).
+\]
+The project embedding is the mean of final node states:
+\[
+g_p=\frac{1}{|V_p|}\sum_{v\in V_p}H_{p,v}^{(2)}.
+\]
+For a build $i$ belonging to project $p(i)$, let $z_i$ be its normalized CI metadata vector. The classifier predicts a logit
+\[
+s_i = f_\theta([g_{p(i)};z_i]),
+\]
+where $[\cdot;\cdot]$ denotes concatenation and $f_\theta$ is a two-layer multilayer perceptron. The predicted failure probability is
+\[
+\hat{y}_i=\sigma(s_i)=\frac{1}{1+\exp(-s_i)}.
+\]
+The target label is
+\[
+y_i=\mathbb{1}[\texttt{num\_fail\_class}_i>0].
+\]
+
+Because positive and negative builds are imbalanced, training uses weighted binary cross-entropy:
+\[
+\mathcal{L}
+=-\frac{1}{N}\sum_{i=1}^{N}
+\left[
+\alpha y_i\log \hat{y}_i
++(1-y_i)\log(1-\hat{y}_i)
+\right],
+\qquad
+\alpha=\frac{N_-}{N_+},
+\]
+where $N_+$ and $N_-$ are the numbers of positive and negative training builds. A build is classified as failing when $\hat{y}_i\ge \tau$, where $\tau$ is selected on the validation split to maximize F1 over thresholds in $[0.2,0.8]$.
 
 
-% \subsection{Approach Details}
-% Describe the details of each component in this subsection
+\subsection{Important Consequence of the Formulation}
 
-To predict build failures without relying on computationally expensive dynamic profiling, our pipeline utilizes a purely static representation of the software combined with historical CI metadata. The rigorous formulation of our static graph construction is detailed below.
-
-We represent the source code of a project as a directed static call graph, $G = (V, E)$. The node set $V$ represents the methods parsed from the \texttt{.java} files, and the edge set $E$ represents the static method invocations (i.e., Method A calls Method B). 
-
-To construct this topology across massive open-source repositories, we employ the Python \texttt{javalang} library to parse the Abstract Syntax Tree (AST) of the production code. Specifically, we systematically traverse the AST to identify \texttt{MethodDeclaration} nodes. Within each method, we locate all \texttt{MethodInvocation} entities. By linking the caller methods to the callee methods, we effectively form the static directed edges $E$. This approach allows us to capture the fundamental structural dependencies of the entire project without the overhead and environment conflicts associated with dynamic execution traces.
-
-% About GNN model
-
-We represent the software project as a heterogeneous graph $G = (V, E)$. The node set $V$ includes two types of nodes: Method Nodes, representing source code functions, and Test Nodes, representing test cases. The edge set $E$ captures dependencies including Call Edges, where method A calls method B, and Cover Edges, where test T executes method A. This structure allows us to capture the ripple effect of a bug from a modified method to a potential test failure.
-
-For Code Change Representation, we identify the modified methods for every commit. We assign initial feature vectors to these nodes using a pre-trained code embedding model, such as CodeBERT, to capture the semantic nature of the change. Unchanged nodes are initialized with a zero state or structural embedding vector.
-
-Regarding the GNN Model, we utilize a Relational Graph Convolutional Network (R GCN) to handle the different edge types. The GNN iteratively updates the representation of each node by aggregating information from its neighbors. The core intuition is that a Test Node connected to a Modified Method Node, even indirectly through multiple hops, will accumulate a higher risk score during the message passing phase. The final layer is a Multi Layer Perceptron (MLP) that outputs a scalar $p_i \in [0, 1]$ for each test node $i$, representing the probability of failure.
-
-
-\begin{figure}[ht]
-    \centering
-    % Resize the graph to fit the column width
-    \resizebox{\columnwidth}{!}{
-    \begin{tikzpicture}[
-        % Global Styles
-        font=\sffamily,
-        >=Latex, % Standard arrow tip
-        node distance=1.5cm,
-        % Simple Node Styles
-        block/.style={draw, rectangle, rounded corners, minimum height=2.5em, minimum width=4em, align=center},
-        method/.style={draw, circle, minimum size=1.2cm, align=center, inner sep=2pt},
-        test/.style={draw, rectangle, minimum size=1.0cm, align=center},
-        highlight/.style={fill=gray!20, thick} % Style for the "Changed" parts
-    ]
-
-    % --- STAGE 1: GRAPH CONSTRUCTION ---
-    \node[align=left, font=\bfseries] (title1) at (-2, 2) {1. Graph Construction};
-
-    % Nodes
-    \node[method] (m1) at (-2, 0) {Method\\A};
-    \node[method, highlight] (m2) at (1, 0) {Method\\B\\(Changed)};
-    \node[test] (t1) at (-0.5, -2) {Test\\1};
-
-    % Edges
-    \draw[->] (m1) -- node[above, font=\small] {calls} (m2);
-    \draw[->, dashed] (t1) -- (m1);
-    \draw[->, dashed] (t1) -- node[right, font=\small] {covers} (m2);
-
-    % Container Box (Dotted line around stage 1)
-    \node[draw, dashed, inner sep=10pt, fit=(title1)(m1)(m2)(t1)] (box1) {};
-
-    % --- ARROW DOWN ---
-    \draw[->, thick, double] (box1.south) -- ++(0, -1) node[midway, right] {Extract Change};
-
-    % --- STAGE 2: CHANGE EMBEDDING ---
-    \begin{scope}[yshift=-5.5cm]
-        \node[align=left, font=\bfseries] (title2) at (-2, 1.5) {2. Change Embedding};
-
-        \node[method, highlight] (input_node) at (-2.5, 0) {Method\\B};
-        \node[block] (bert) at (0, 0) {CodeBERT};
-        \node[draw, rectangle, fill=gray!10, minimum width=0.5cm, minimum height=1.5cm, label=below:Vector] (vec) at (2.5, 0) {};
-
-        \draw[->] (input_node) -- (bert);
-        \draw[->] (bert) -- (vec);
-
-        % Container Box
-        \node[draw, dashed, inner sep=10pt, fit=(title2)(input_node)(vec)] (box2) {};
-    \end{scope}
-
-    % --- ARROW DOWN ---
-    \draw[->, thick, double] (box2.south) -- ++(0, -1) node[midway, right] {Propagate};
-
-    % --- STAGE 3: PREDICTION ---
-    \begin{scope}[yshift=-10cm]
-        \node[align=left, font=\bfseries] (title3) at (-2, 1.5) {3. Failure Prediction};
-
-        \node[block] (gnn) at (-2, 0) {GNN\\Propagation};
-        \node[block] (mlp) at (1, 0) {MLP\\Classifier};
-        \node[circle, draw, thick] (output) at (3.5, 0) {$P_{fail}$};
-
-        \draw[->] (gnn) -- (mlp);
-        \draw[->] (mlp) -- (output);
-
-        % Container Box
-        \node[draw, dashed, inner sep=10pt, fit=(title3)(gnn)(output)] (box3) {};
-    \end{scope}
-
-    \end{tikzpicture}
-    }
-    \caption{Overview of the GNN TCP approach. (1) A dependency graph connects tests to methods. (2) Changed methods are embedded into vectors. (3) A GNN propagates these features to predict test failure probability.}
-    \label{fig:gnn_simple}
-\end{figure}
-
-\subsection{Approach Details}
-Describe the details of each component in this subsection
+The formulation above implies that all builds from the same project share the same graph embedding $g_p$. Thus, for two builds $i$ and $j$ from the same project,
+\[
+p(i)=p(j)\quad\Longrightarrow\quad g_{p(i)}=g_{p(j)}.
+\]
+Any build-specific variation must therefore come only from $z_i$, the CI metadata vector. The graph cannot encode which files changed, which methods were executed, or which tests covered the changed code for a particular build. This mathematical property is central to the empirical failure analyzed in Section~\ref{sec:evaluation}: the graph representation is static and project-level, so it can easily become a soft project identifier rather than a build-specific dependency signal.

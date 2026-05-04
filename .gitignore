@@ -3,3 +3,9 @@
 .codex
 /outputs/smoke
 /outputs
+report/main.log
+report/main.fdb_latexmk
+report/main.aux
+report/main.fls
+report/main.out
+report/main.pdf

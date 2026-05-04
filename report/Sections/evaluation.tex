@@ -1,76 +1,150 @@
-% \section{Experimental Evaluation}
-
-% % [proposal] List the research questions relevant to the problem and the proposed technique that you are trying to answer. 
-% RQ1: How does GNN-TCP compare to state-of-the-techniques (e.g., LatestFail+CC [1], XGRL-TCP [2], and Mutation-aware TCP [3]) in terms of APFDc and APFD? \\
-% RQ2: How effective is GNN-TCP in detecting 'First Failures' compared to traditional and recent GNN-based approaches?
-% \subsection{Evaluation Setting}
-% % [proposal] Explain the evaluation plan, i.e., how you are going to evaluate the proposed technique (you will revisit this later to modify/improve once you complete the evaluation). 
-
-% We use the LRTS dataset introduced in ISSTA '24, which contains build data from 10 large scale open-source projects (e.g., Kafka, TVM). In the LRTS dataset environment, we compared performance against 59 baseline techniques and two recent GNN-based SOTA models [2, 3] using Average Percentage of Faults Detected per Cost (APFDc) and APFD metrics.
-
-% \subsection{Evaluation Results Forecast}
-% % Present the results of individual research questions in this subsection. Use tables/figures to present the results. You need to discuss discuss your observations and speculate the reasons for observations. 
-
-% We compared the numerical values showing how much the proposed GNN model reduced the time required to detect the first defect.
-
-% We will compare our GNN TCP model against 59 baselines provided in the LRTS benchmarking suite, with a specific focus on LatestFail+CC (a hybrid of Recency and Coverage) and high performance GNN-based models[2, 3]. We will use two primary metrics. The first is APFD, or Average Percentage of Faults Detected, which measures the area under the curve of fault detection over test count. The second is APFDc, or Cost Cognizant APFD, which measures fault detection normalized by the execution time of tests and is critical for long running suites. We aim to show that GNN-TCP is more suitable for large-scale LRTS environment than heavy SOTA models. This is because it maintains high detection capabilities with significantly lower computational requirements.
-
-
-% \subsection{Evaluation Results}
-% Present the results of individual research questions in this subsection. Use tables/figures to present the results. You need to discuss your observations and speculate the reasons for observations. 
-
 \section{Experimental Evaluation}
-In this section, we evaluate our lightweight GCN approach for build failure prediction. Rather than comparing against dynamic coverage-heavy SOTAs that are unscalable in our target LRTS environment, we focus on establishing an empirical baseline using available static and metadata features.
+\label{sec:evaluation}
 
-\subsection{Evaluation Plan}
-Our evaluation is guided by the following Research Questions (RQs):
-\begin{itemize}
-    \item \textbf{RQ1 (Predictive Performance):} How effectively can a lightweight GCN encoder, combined with CI metadata, predict failing builds using only static call graphs?
-    \item \textbf{RQ2 (Decision Thresholds):} How does tuning the decision threshold affect the trade-off between Precision and Recall in a highly imbalanced LRTS dataset?
-    \item \textbf{RQ3 (Root Cause Analysis):} What are the fundamental limitations of relying solely on static features for dynamic runtime failure prediction?
-\end{itemize}
+In this section, we evaluate the implemented static GCN baseline for build failure prediction. The goal is not to claim state-of-the-art performance, but to quantify what can and cannot be learned from whole-project static call graphs plus CI metadata.
 
-\textbf{Dataset Split (Temporal Validation):} 
-To simulate a realistic CI/CD pipeline, we employ a temporal split rather than a random split. The build records are sorted by their \texttt{build\_timestamp}. We allocate the oldest 70\% of builds for training, the next 15\% for validation (hyperparameter and threshold tuning), and the most recent 15\% for testing.
+\subsection{Research Questions}
 
-\textbf{Evaluation Metrics:} 
-Because build failures are rare events (highly imbalanced dataset), standard Accuracy is a misleading metric. Therefore, we evaluate the model using \textbf{Precision}, \textbf{Recall}, and the \textbf{F1-Score}. Precision measures the correctness of our failure alerts, while Recall measures our ability to capture all actual failing builds.
+Our evaluation is guided by three research questions. RQ1, predictive performance, asks whether a lightweight static GCN can predict failing builds better than simple baselines. RQ2, dataset sensitivity, asks how stable the results are across the available metadata datasets. RQ3, graph failure mode, asks whether the graph representation encodes useful build-specific dependency information or mostly behaves like a project identifier.
 
-\subsection{Evaluation Results}
+\subsection{Evaluation Protocol}
 
-\subsubsection{RQ1: Predictive Performance of Static GCN}
-Table \ref{tab:results} presents the performance metrics of our model across the temporal splits. 
+We evaluate three logical datasets: \texttt{dataset\_init.csv}, \texttt{dataset.csv}, and \texttt{dataset\_filter.csv}. The first file uses an older metadata schema, so we normalize it into the current training schema by mapping \texttt{ts\_duration}, \texttt{passcount}, and \texttt{failcount} into \texttt{test\_suite\_duration\_s}, \texttt{num\_pass\_class}, and \texttt{num\_fail\_class}; because it has no stage field, we assign \texttt{stage\_id=unknown}. For all datasets, the binary target is
+\[
+y_i=\mathbb{1}[\texttt{num\_fail\_class}_i>0].
+\]
+
+To approximate deployment in CI, build records are sorted by timestamp. The first 70\% are used for training, the next 15\% for validation, and the final 15\% for testing. The validation set is used to select the decision threshold $\tau$ that maximizes F1 over thresholds in $[0.2,0.8]$.
+
+\subsection{Metrics and Baseline}
+
+Let TP, TN, FP, and FN denote true positives, true negatives, false positives, and false negatives. We report
+\[
+\text{Accuracy}=\frac{\mathrm{TP}+\mathrm{TN}}{\mathrm{TP}+\mathrm{TN}+\mathrm{FP}+\mathrm{FN}},
+\]
+\[
+\text{Precision}=\frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FP}},
+\qquad
+\text{Recall}=\frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FN}},
+\]
+\[
+\text{F1}=\frac{2\cdot\text{Precision}\cdot\text{Recall}}{\text{Precision}+\text{Recall}}.
+\]
+These metrics are more informative than accuracy because the failure label is highly imbalanced and the positive rate changes over time.
+
+We compare against an all-positive baseline that predicts every build as failing. If the positive rate is $\pi=N_+/N$, then this baseline has
+\[
+\text{Accuracy}=\pi,\qquad
+\text{Precision}=\pi,\qquad
+\text{Recall}=1,
+\]
+and therefore
+\[
+\text{F1}_{\mathrm{all+}}=\frac{2\pi}{1+\pi}.
+\]
+This baseline is intentionally simple, but it is mathematically important: when the positive rate is high, always predicting failure can achieve a strong F1 score.
+
+\subsection{Overall Results}
+
+\begin{table*}[ht]
+    \centering
+    \caption{Cross-dataset performance of the static GCN build failure predictor.}
+    \label{tab:cross_dataset_results}
+    \begin{tabular}{llrrrrrrrr}
+        \toprule
+        Dataset & Split & Rows & Pos. Rate & Best Epoch & $\tau$ & Acc. & Prec. & Rec. & F1 \\
+        \midrule
+        \texttt{dataset\_init} & Train & 2,334 & 0.891 & 40 & 0.20 & 0.919 & 0.973 & 0.934 & 0.953 \\
+        \texttt{dataset\_init} & Validation & 500 & 0.434 & 40 & 0.20 & 0.732 & 0.799 & 0.512 & 0.624 \\
+        \texttt{dataset\_init} & Test & 501 & 0.425 & 40 & 0.20 & 0.585 & 0.508 & 0.728 & 0.598 \\
+        \midrule
+        \texttt{dataset} & Train & 5,157 & 0.902 & 34 & 0.20 & 0.926 & 0.963 & 0.954 & 0.959 \\
+        \texttt{dataset} & Validation & 1,105 & 0.702 & 34 & 0.20 & 0.837 & 0.906 & 0.857 & 0.881 \\
+        \texttt{dataset} & Test & 1,106 & 0.389 & 34 & 0.20 & 0.741 & 0.961 & 0.347 & 0.509 \\
+        \midrule
+        \texttt{dataset\_filter} & Train & 5,157 & 0.902 & 34 & 0.20 & 0.926 & 0.963 & 0.954 & 0.959 \\
+        \texttt{dataset\_filter} & Validation & 1,105 & 0.702 & 34 & 0.20 & 0.837 & 0.906 & 0.857 & 0.881 \\
+        \texttt{dataset\_filter} & Test & 1,106 & 0.389 & 34 & 0.20 & 0.741 & 0.961 & 0.347 & 0.509 \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+Table~\ref{tab:cross_dataset_results} answers RQ1 and RQ2. The model fits the training data and performs well on validation for the current datasets, but it does not generalize reliably to the final temporal test period. On \texttt{dataset} and \texttt{dataset\_filter}, test precision is high at 0.961, but recall falls to 0.347. In other words, when the model predicts failure it is usually correct, but it misses most actual failures.
 
 \begin{table}[ht]
     \centering
-    \caption{Performance Metrics of the GCN-based Build Failure Predictor}
-    \label{tab:results}
-    \begin{tabular}{lcccc}
+    \caption{Test F1 compared with the all-positive baseline.}
+    \label{tab:baseline_results}
+    \begin{tabular}{lrr}
         \toprule
-        \textbf{Split} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} \\
+        Dataset & All-positive F1 & GCN F1 \\
         \midrule
-        Train & 0.000 & 0.000 & 0.000 & 0.000 \\
-        Validation & 0.000 & 0.000 & 0.000 & 0.000 \\
-        \textbf{Test} & \textbf{0.000} & \textbf{0.000} & \textbf{0.000} & \textbf{0.000} \\
+        \texttt{dataset\_init} & 0.597 & 0.598 \\
+        \texttt{dataset} & 0.560 & 0.509 \\
+        \texttt{dataset\_filter} & 0.560 & 0.509 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-As observed in Table \ref{tab:results}, while the model achieves relatively high accuracy (due to predicting the majority 'pass' class), both Precision and Recall remain extremely low. This directly answers RQ1, indicating that static features and metadata alone struggle to reliably flag failing builds.
+Table~\ref{tab:baseline_results} shows that the GCN is effectively tied with the all-positive baseline on \texttt{dataset\_init} and worse than it on the two current datasets. This is a strong negative result: a graph-based method should at least outperform a classifier with no graph information.
 
-\subsubsection{RQ2 \& RQ3: Root Cause Analysis for Low Recall and Precision}
-The underwhelming F1-Score and significantly low Recall (as seen in our Test results) reveal critical insights into the nature of LRTS environments. We speculate three fundamental root causes for this performance degradation:
+\subsection{Temporal and Project Distribution Shift}
 
-\textbf{1. The Semantic Gap between Static Structure and Dynamic State:} 
-Our model relies purely on static AST call graphs (e.g., Method A calls Method B). However, runtime test failures are rarely caused by the mere existence of a call. They are typically triggered by specific data states, edge-case variable values, or concurrent execution timings. A static GCN cannot observe these runtime states, making it fundamentally "blind" to the actual causes of dynamic regressions.
+The temporal split creates a substantial distribution shift. In \texttt{dataset} and \texttt{dataset\_filter}, the training period is dominated by \texttt{kafka}: 4,589 of 5,157 training rows, with a 0.964 positive rate. The test period contains many more \texttt{james}, \texttt{hadoop}, and \texttt{hbase} rows, with much lower or more mixed positive rates. For example, \texttt{james} contributes 422 test rows but has only a 0.052 positive rate, while \texttt{kafka} contributes 137 test rows with a 0.993 positive rate.
 
-\textbf{2. Oversmoothing and Coarse Granularity:}
-In our architecture, the node states from the entire project graph are mean-pooled into a single 'Project Embedding'. For massive industrial repositories like Hadoop or Kafka, pooling tens of thousands of method nodes into one vector causes severe information loss (oversmoothing). The model fails to isolate the exact localized risk of a small commit, diluting the failure signal.
+This matters because the graph embedding $g_p$ is fixed per project. If training associates $g_{\texttt{kafka}}$ with frequent failures and associates other project embeddings with fewer observed failures, the classifier can appear strong during validation but fail when the project mix changes.
 
-\textbf{3. Over-reliance on Historical Metadata:}
-Because the structural graph embedding is too coarse, we speculate that the MLP classifier heavily overfits to the temporal CI metadata (e.g., \texttt{project\_recent\_fail\_rate}). If a project has been stable recently, the model aggressively predicts 'Pass', leading to a high False Negative rate (thus, plummeting the Recall). This proves that history-based heuristics alone cannot predict 'First Failures' originating from entirely new code modifications.
+\subsection{Per-Project Test Behavior}
 
-Specifically, our exhaustive attempts to extract dynamic method-level coverage involved directly instrumenting the legacy build systems. We executed customized terminal commands (e.g., injecting \texttt{jacoco:prepare-agent} directly into the \texttt{mvn test} lifecycle) and strictly manipulated JVM environment variables to prevent infinite deadlocks. Despite these deep engineering efforts, the inherent fragility of the legacy LRTS environment, such as unresolved dependency trees and extreme build timeouts, rendered the comprehensive extraction of dynamic coverage technically unfeasible, forcing our pivot to a static-only approach.
+\begin{table*}[ht]
+    \centering
+    \caption{Per-project test metrics for \texttt{dataset} and \texttt{dataset\_filter}.}
+    \label{tab:per_project_results}
+    \begin{tabular}{lrrrrrrrrr}
+        \toprule
+        Project & Rows & Pos. Rate & TP & TN & FP & FN & Prec. & Rec. & F1 \\
+        \midrule
+        \texttt{hadoop} & 287 & 0.467 & 6 & 152 & 1 & 128 & 0.857 & 0.045 & 0.085 \\
+        \texttt{hbase} & 257 & 0.537 & 6 & 118 & 1 & 132 & 0.857 & 0.043 & 0.083 \\
+        \texttt{james} & 422 & 0.052 & 1 & 397 & 3 & 21 & 0.250 & 0.045 & 0.077 \\
+        \texttt{kafka} & 137 & 0.993 & 136 & 0 & 1 & 0 & 0.993 & 1.000 & 0.996 \\
+        \texttt{karaf} & 3 & 0.000 & 0 & 3 & 0 & 0 & 0.000 & 0.000 & 0.000 \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
 
-\textbf{Conclusion of the Analysis:} 
-Our empirical failure to achieve high performance with a static-only GCN inadvertently proves our initial hypothesis: \textbf{Method-level Dynamic Coverage is strictly necessary for accurate Test Case Prioritization.} The technical bottlenecks we experienced in extracting JaCoCo traces (Section 3.2) must be resolved by future engineering efforts, as static fallbacks are inadequate for the complexities of LRTS.
+Table~\ref{tab:per_project_results} answers RQ3. The model almost perfectly captures \texttt{kafka} failures but misses nearly all failures in \texttt{hadoop}, \texttt{hbase}, and \texttt{james}. This behavior is consistent with a project-prior model, not a build-specific dependency model.
+
+\subsection{Graph Structure Diagnostics}
+
+\begin{table*}[ht]
+    \centering
+    \caption{Static call graph statistics. The largest component is reported as a percentage of nodes.}
+    \label{tab:graph_stats}
+    \begin{tabular}{lrrrrrr}
+        \toprule
+        Project & Nodes & Edges & Avg. Degree & Weak Comp. & Largest Comp. & Max Degree \\
+        \midrule
+        \texttt{hadoop} & 87,016 & 253,694 & 5.83 & 974 & 96.9\% & 5,828 \\
+        \texttt{hbase} & 42,609 & 131,416 & 6.17 & 470 & 96.2\% & 3,207 \\
+        \texttt{jackrabbit-oak} & 34,245 & 94,337 & 5.51 & 426 & 96.1\% & 2,122 \\
+        \texttt{kafka} & 29,757 & 87,855 & 5.90 & 577 & 95.0\% & 2,889 \\
+        \texttt{james} & 23,723 & 69,061 & 5.82 & 337 & 95.9\% & 2,062 \\
+        \texttt{karaf} & 7,870 & 21,794 & 5.54 & 166 & 94.3\% & 597 \\
+        \bottomrule
+    \end{tabular}
+\end{table*}
+
+The graph statistics in Table~\ref{tab:graph_stats} explain why the graph signal is weak. These are large sparse graphs with one giant weak component and many small components. Since the model mean-pools over all nodes, localized information is diluted:
+\[
+g_p=\frac{1}{|V_p|}\sum_{v\in V_p}H_{p,v}^{(2)}.
+\]
+If a failure-relevant region contains $k$ nodes in a graph with $|V_p|$ nodes, its direct contribution to the mean is only $k/|V_p|$. For a project such as \texttt{hadoop}, even a 100-node affected region contributes approximately
+\[
+\frac{100}{87016}\approx 0.00115
+\]
+of the unweighted mean. Without changed-node indicators or coverage-guided pooling, the model has little chance to preserve this local signal.
+
+\subsection{Summary of Findings}
+
+The static GCN fails for three mathematically concrete reasons. First, $g_p$ is invariant across builds from the same project, so the graph cannot represent build-specific changes. Second, symmetrization replaces $A_p$ with $A_p+A_p^\top+I$, discarding the direction of calls. Third, mean pooling over large graphs compresses tens of thousands of node embeddings into one vector, which washes out localized fault information. These limitations explain why the model performs like a project-prior classifier rather than a dependency-aware failure predictor.

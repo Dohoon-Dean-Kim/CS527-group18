@@ -26,7 +26,6 @@
 \usepackage{array,multirow,graphicx}
 \usepackage{float}
 \usepackage{graphicx}
-\usepackage{algorithm}
 \usepackage{amsfonts}
 % \documentclass{article}
 \usepackage{tikz}
@@ -82,7 +81,6 @@
 \definecolor{CadetBlue}{RGB}{243.0,42.1,134.0}
 
 %%% Packages for Algorithms %%%
-\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
 \SetKwInput{KwInput}{Input}                % Set the Input
 \SetKwInput{KwInputs}{Inputs}                % Set the Input
 \SetKwInput{KwOutput}{Output}              % set the Output
@@ -94,17 +92,13 @@
 \author{Ang Li, Do Hoon Kim}
 \affiliation{
     \institution{University of Illinois at Urbana-Champaign}
+    \city{Urbana}
+    \country{USA}
 }
 \email{[angl5,dhk8]@illinois.edu}
 
 \begin{abstract}
-    % [proposal] One or more opening sentences on the importance of problem. 
-    % One of more statements about limitations of existing approaches. 
-    % One or more statements on how your proposed technique bridges the gap.
-    % \newline
-    % To enhance the efficiency of long-term test sets, we address complex code dependencies overlooked by existing techniques through GNN learning.
-    !!! Fix later !!!
-    In large-scale industrial software development, long-running test suites (LRTS) often take 6.5 hours, causing severe bottlenecks in continuous integration (CI) pipeline. To address this, history-based prioritization techniques like LatestFail+CC have been adopted due to low overhead. However, these methods inherently struggle to detect 'First Failures' because they rely on past execution data and ignore the complex dependencies between code and tests. To bridge this gap, we propose GNN-TCP, a new test prioritization method based on Relational Graph Convolution Networks (R-GCN). By constructing a Code Dependency Graph (CDG) that integrates method calls and test coverage, our model learns the structural propagation of code change impacts to predict failure probabilities. We evaluate GNN-TCP on LRTS dataset comprising 10 large-scale open-source projects. This evaluation aims to demonstrate that the dependency-aware approach significantly outperforms 59 baseline techniques in terms of APFDc. By reducing the training and inference overhead compared to RL or mutation-based SOTA models, GNN-TCP proves to be a more practical solution for large-scale industrial CI environment.
+    Long-running test suites (LRTS) create severe bottlenecks in continuous integration pipelines because developers need rapid feedback even when full test execution can take hours. Our original goal was to build a dependency-aware test prioritization model using method-level dynamic coverage, but extracting stable coverage from legacy large-scale Java/Scala projects proved brittle due to build incompatibilities, dependency conflicts, and instrumentation failures. We therefore evaluate a lighter static baseline: a two-layer Graph Convolutional Network (GCN) over project call graphs, combined with temporal CI metadata, for build failure prediction. Formally, the model predicts whether a build has at least one failing test class, $y=\mathbb{1}[\texttt{num\_fail\_class}>0]$. Across the available metadata datasets, the static GCN fails to provide reliable generalization: on the current datasets, test F1 is $0.509$, below an all-positive baseline F1 of $0.560$. Our analysis shows that the graph embedding acts mostly as a project identifier because each build receives the same static project-level graph representation. This result highlights a key limitation of whole-project static call graphs: without build-specific changed-node and coverage information, graph structure alone is too coarse for robust CI failure prediction.
 \end{abstract}
 
 \maketitle
@@ -116,4 +110,5 @@
 \input{Sections/related-work}
 \input{Sections/threatstovalidity}
 \input{Sections/conclusion}
+\input{Sections/references}
 \end{document}
