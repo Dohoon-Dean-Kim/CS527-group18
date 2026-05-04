@@ -9,7 +9,7 @@ Our evaluation is guided by three research questions. RQ1, predictive performanc
 
 \subsection{Evaluation Protocol}
 
-We evaluate three logical datasets: \texttt{dataset\_init.csv}, \texttt{dataset.csv}, and \texttt{dataset\_filter.csv}. The first file uses an older metadata schema, so we normalize it into the current training schema by mapping \texttt{ts\_duration}, \texttt{passcount}, and \texttt{failcount} into \texttt{test\_suite\_duration\_s}, \texttt{num\_pass\_class}, and \texttt{num\_fail\_class}; because it has no stage field, we assign \texttt{stage\_id=unknown}. For all datasets, the binary target is
+We evaluate three logical datasets: \texttt{dataset\_init.csv}, \texttt{dataset.csv}, and \texttt{dataset\_filter.csv}. The first file uses an older metadata schema, so we convert its duration, passing-test count, and failing-test count fields into the corresponding current schema fields. Because it has no stage field, we assign an unknown stage label. For all datasets, the binary target is
 \[
 y_i=\mathbb{1}[\texttt{num\_fail\_class}_i>0].
 \]
