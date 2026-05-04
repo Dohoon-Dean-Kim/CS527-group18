@@ -2,7 +2,7 @@
 
 \subsection{Approach Overview}
 % [proposal] Describe different components and stages of your technique using text/figure/example/flowchart/etc. 
-Our initial design was a test-level GNN-TCP system: construct a graph connecting changed methods to covered tests, propagate change impact through the graph, and rank tests by predicted failure probability. In practice, robust method-level dynamic coverage was not available for the full LRTS setting. The implemented technique is therefore a static build-failure baseline. It has three stages: (1) construct one static call graph per project, (2) encode each project graph using a two-layer Graph Convolutional Network (GCN), and (3) concatenate the resulting project embedding with per-build CI metadata to predict whether a build contains at least one failing test class.
+Our initial design was a test-level GNN-TCP system: construct a graph connecting changed methods to covered tests, propagate change impact through the graph, and rank tests by predicted failure probability. This follows the general GNN idea that node representations can be learned by message passing over graph structure \cite{zhou2021gnnreview}. In practice, robust method-level dynamic coverage was not available for the full LRTS setting. The implemented technique is therefore a static build-failure baseline. It has three stages: (1) construct one static call graph per project, (2) encode each project graph using a two-layer Graph Convolutional Network (GCN), and (3) concatenate the resulting project embedding with per-build CI metadata to predict whether a build contains at least one failing test class.
 
 \subsection{Static Graph Construction}
 
