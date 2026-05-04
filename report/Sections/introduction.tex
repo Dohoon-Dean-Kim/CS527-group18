@@ -1,0 +1,56 @@
+\raggedbottom
+\section{Introduction}
+
+% [proposal] One paragraph about the importance of the problem
+
+% [proposal] One or two paragraphs about state-of-the-art techniques that have tried to solve the problem
+
+% [proposal] One paragraph about the research gap (why and how existing techniques fail to properly treat the problem)
+
+% [proposal] One paragraph on how the proposed technique will bridge the research gap
+
+% [proposal] One paragraph about the experimental plan
+
+% One paragraph about the results of experiments
+
+% A list of contributions your technique/paper makes.
+
+% Industrial projects frequently encounter Long-Running Test Suites (LRTS) that take over 6.5 hours to execute. Therefore, efficient test case prioritization is essential to provide timely feedback by running critical test first.
+
+% For large-scale systems like those in the LRTS dataset, traditional methods are often too slow because of high computational overhead. Therefore, recent study focuses on history-based techniques which are faster and lighter. According to the ISSTA '24, the current state-of-the-art is LatestFail+CC. This hybrid approach combines recent failure history with a lightweight coverage metric, offering the best balance between speed and fault detection. It serves as the primary baseline for our research. In addition, recent academic papers introduced high performance models such as XGRL-TCP[2], which use reinforcement learning, and mutation-aware GNNs [3].
+
+% The latest technique, LatestFail+CC, is simple but has the limitation of relying on past history. It assumes that tests which failed recently are likely to fail again. As a result, it may ignore the influence of new modifications in stable areas. Therefore, existing techniques are vulnerable to detecting 'First Failures' because they fail to capture the complex dependencies between tests and code. Because they do not consider how changes spread through the codebase, these methods fail to identify risks with no prior history. Due to the high computational costs arising from repetitive reinforcement learning training or mutation analysis, it is impractical for a 6.5 hour LRTS cycle.
+
+% We perform sophisticated dependency-based failure probability prediction by learning the propagation paths of code change impacts through Graph Neural Networks (GNNs). By utilizing a Relational Graph Convolutional Network, our model aggregates risk features from modified methods and propagates them to potential test nodes, assigning higher failure probabilities to tests affected by the changes. This approach aims to achieve a better balance between the speed of history-based methods and the accuracy of complex GNN models.
+
+% We will quantitatively validate the effectiveness of our GNN model using Long-Running Test Suites (LRTS) dataset, which includes 10 large-scale projects. We compare our approach against 59 baseline techniques, measuring performance using Average Percentage of Faults Detected (APFD) and its cost-cognizant variant (APFDc). Our evaluation aims to demonstrate improved efficiency over traditional baselines and recent SOTA models [2, 3], particularly for detecting first-time failures.
+
+% % A list of contributions your technique/paper makes.
+% A list of contributions is as follows:
+% \begin{itemize}
+%     \item We apply the Relational Graph Convolutional Network (R-GCN) for the first time to test prioritization. This model learns how code changes propagate through the graph to predict failure probabilities.
+%     \item We overcome the limitations of history-based techniques by detecting ‘First Failures’. Unlike existing methods relying on past data, our approach identifies risks based on actual code dependencies.
+%     \item We validated our approach using the LRTS dataset (10 large-scale projects). Benchmarking against 59 baseline techniques and recnet GNN-based SOTAs demonstrated our model's robustness and effectiveness.
+% \end{itemize}
+
+%%% Introduction changed
+
+Industrial projects frequently encounter Long-Running Test Suites (LRTS) that take over 6.5 hours to execute. In such environments, identifying failing builds early in the continuous integration (CI) pipeline is essential to save computational resources and provide timely feedback to developers. For large-scale systems like those in the LRTS dataset, traditional dynamic analysis methods are often too slow because of high computational overhead. Consequently, recent studies have heavily focused on history-based techniques or lightweight coverage metrics to balance speed and fault detection.
+
+To further optimize this process, our initial intuition was to perform sophisticated Test Case Prioritization (TCP) by learning the propagation paths of code change impacts through a Relational Graph Convolutional Network (R-GCN). We aimed to construct a complete Code Dependency Graph (CDG) utilizing method-level dynamic coverage to precisely target 'First Failures'. However, during the empirical data extraction phase on the LRTS dataset comprising 10 large-scale open-source projects, we encountered severe technical constraints. Specifically, accessing legacy build artifacts and successfully injecting dynamic profiling agents (e.g., JaCoCo) caused frequent Java/Scala version conflicts and build failures. Securing consistent method-level dynamic data across the entire suite proved to be highly impractical and unscalable in a real-world industrial context.
+
+Given these constraints, this paper pivots from dynamic coverage-based test prioritization to an empirical evaluation of \textbf{Build Failure Prediction} using static analysis and CI metadata. Rather than relying on incomplete or unstable dynamic execution traces, we examine a lightweight Graph Convolutional Network (GCN) encoder that operates on static source code call graphs. By combining structural node features with per-build temporal metadata, we assess whether this approach can predict failing builds ($num\_fail\_class > 0$) as a preliminary gatekeeper.
+
+Our experimental results indicate that while the GCN model provides a computationally efficient framework, it achieves modest performance, particularly exhibiting a low recall. These underwhelming results suggest that static features alone are insufficient to capture the dynamic execution risks of complex industrial projects. These findings serve as a valuable empirical baseline, highlighting the significant performance gap between static and dynamic analysis and confirming the necessity of high-fidelity dynamic coverage for reliable build failure prediction in large-scale environments.
+
+Our main contributions are as follows:
+\begin{itemize}
+    \item We provide a detailed empirical analysis of the severe technical constraints and data sparsity encountered when attempting to extract method-level dynamic dependencies from large-scale industrial projects.
+    \item We implement a GCN-style encoder combining static call graphs with CI metadata and demonstrate the limitations of a purely static approach in build failure prediction.
+    \item We analyze the performance gap between static and dynamic features, offering insights into the necessity of dynamic analysis for robust CI integration in legacy LRTS environments.
+\end{itemize}
+
+
+% One paragraph about the results of experiments
+
+% A list of contributions your technique/paper makes. 

@@ -1,0 +1,10 @@
+\section{Threats to Validity}
+
+\textbf{Internal Validity:} 
+The primary threat to internal validity lies in our architectural simplifications and data extraction bottlenecks. To handle massive project graphs, we employed a simple mean-pooling strategy to generate project embeddings. This approach likely caused oversmoothing, washing out localized fault signals and contributing to the low Recall. Furthermore, our inability to extract comprehensive JaCoCo dynamic coverage was dependent on our specific build environment and the inherent fragility of legacy dependency versions. A highly customized, heavily engineered CI setup might successfully bypass these extraction bottlenecks and yield a richer graph topology. Additionally, parsing static ASTs limits our visibility into dynamic dispatch and runtime polymorphism, which are common in object-oriented Java systems.
+
+\textbf{External Validity:} 
+Our evaluation is restricted to the LRTS dataset, specifically 10 large-scale Apache open-source projects (e.g., Hadoop, Kafka). While these represent complex, real-world systems, their architecture and Java/Scala-based CI workflows might not perfectly generalize to proprietary, closed-source industrial repositories, microservice architectures, or projects written in other programming languages (e.g., C++ or Python).
+
+\textbf{Construct Validity:} 
+A potential threat to construct validity arises from our pivot in the prediction target. By predicting whether a build contains at least one failing test class ($num\_fail\_class > 0$), we established a binary proxy for CI optimization. While this formulation effectively measures the model's capability to act as a preliminary gatekeeper, it does not fully capture the continuous time-saving metrics (such as APFD or APFDc) traditionally used in granular Test Case Prioritization (TCP) research.

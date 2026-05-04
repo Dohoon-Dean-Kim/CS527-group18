@@ -1,0 +1,101 @@
+\section{Proposed Technique}
+
+\subsection{Approach Overview}
+% [proposal] Describe different components and stages of your technique using text/figure/example/flowchart/etc. 
+Our proposed technique, GNN TCP, consists of three main stages. First is Graph Construction, where we parse the source code and test suite to build a Code Dependency Graph (CDG) representing the relationships between methods and tests. Second is Change Embedding, where we map the specific code changes from the current commit onto the graph nodes. Third is Failure Prediction, where a Graph Neural Network propagates the impact features of the changed nodes across the graph to predict the failure probability of test nodes.
+
+
+% \subsection{Approach Details}
+% Describe the details of each component in this subsection
+
+To predict build failures without relying on computationally expensive dynamic profiling, our pipeline utilizes a purely static representation of the software combined with historical CI metadata. The rigorous formulation of our static graph construction is detailed below.
+
+We represent the source code of a project as a directed static call graph, $G = (V, E)$. The node set $V$ represents the methods parsed from the \texttt{.java} files, and the edge set $E$ represents the static method invocations (i.e., Method A calls Method B). 
+
+To construct this topology across massive open-source repositories, we employ the Python \texttt{javalang} library to parse the Abstract Syntax Tree (AST) of the production code. Specifically, we systematically traverse the AST to identify \texttt{MethodDeclaration} nodes. Within each method, we locate all \texttt{MethodInvocation} entities. By linking the caller methods to the callee methods, we effectively form the static directed edges $E$. This approach allows us to capture the fundamental structural dependencies of the entire project without the overhead and environment conflicts associated with dynamic execution traces.
+
+% About GNN model
+
+We represent the software project as a heterogeneous graph $G = (V, E)$. The node set $V$ includes two types of nodes: Method Nodes, representing source code functions, and Test Nodes, representing test cases. The edge set $E$ captures dependencies including Call Edges, where method A calls method B, and Cover Edges, where test T executes method A. This structure allows us to capture the ripple effect of a bug from a modified method to a potential test failure.
+
+For Code Change Representation, we identify the modified methods for every commit. We assign initial feature vectors to these nodes using a pre-trained code embedding model, such as CodeBERT, to capture the semantic nature of the change. Unchanged nodes are initialized with a zero state or structural embedding vector.
+
+Regarding the GNN Model, we utilize a Relational Graph Convolutional Network (R GCN) to handle the different edge types. The GNN iteratively updates the representation of each node by aggregating information from its neighbors. The core intuition is that a Test Node connected to a Modified Method Node, even indirectly through multiple hops, will accumulate a higher risk score during the message passing phase. The final layer is a Multi Layer Perceptron (MLP) that outputs a scalar $p_i \in [0, 1]$ for each test node $i$, representing the probability of failure.
+
+
+\begin{figure}[ht]
+    \centering
+    % Resize the graph to fit the column width
+    \resizebox{\columnwidth}{!}{
+    \begin{tikzpicture}[
+        % Global Styles
+        font=\sffamily,
+        >=Latex, % Standard arrow tip
+        node distance=1.5cm,
+        % Simple Node Styles
+        block/.style={draw, rectangle, rounded corners, minimum height=2.5em, minimum width=4em, align=center},
+        method/.style={draw, circle, minimum size=1.2cm, align=center, inner sep=2pt},
+        test/.style={draw, rectangle, minimum size=1.0cm, align=center},
+        highlight/.style={fill=gray!20, thick} % Style for the "Changed" parts
+    ]
+
+    % --- STAGE 1: GRAPH CONSTRUCTION ---
+    \node[align=left, font=\bfseries] (title1) at (-2, 2) {1. Graph Construction};
+
+    % Nodes
+    \node[method] (m1) at (-2, 0) {Method\\A};
+    \node[method, highlight] (m2) at (1, 0) {Method\\B\\(Changed)};
+    \node[test] (t1) at (-0.5, -2) {Test\\1};
+
+    % Edges
+    \draw[->] (m1) -- node[above, font=\small] {calls} (m2);
+    \draw[->, dashed] (t1) -- (m1);
+    \draw[->, dashed] (t1) -- node[right, font=\small] {covers} (m2);
+
+    % Container Box (Dotted line around stage 1)
+    \node[draw, dashed, inner sep=10pt, fit=(title1)(m1)(m2)(t1)] (box1) {};
+
+    % --- ARROW DOWN ---
+    \draw[->, thick, double] (box1.south) -- ++(0, -1) node[midway, right] {Extract Change};
+
+    % --- STAGE 2: CHANGE EMBEDDING ---
+    \begin{scope}[yshift=-5.5cm]
+        \node[align=left, font=\bfseries] (title2) at (-2, 1.5) {2. Change Embedding};
+
+        \node[method, highlight] (input_node) at (-2.5, 0) {Method\\B};
+        \node[block] (bert) at (0, 0) {CodeBERT};
+        \node[draw, rectangle, fill=gray!10, minimum width=0.5cm, minimum height=1.5cm, label=below:Vector] (vec) at (2.5, 0) {};
+
+        \draw[->] (input_node) -- (bert);
+        \draw[->] (bert) -- (vec);
+
+        % Container Box
+        \node[draw, dashed, inner sep=10pt, fit=(title2)(input_node)(vec)] (box2) {};
+    \end{scope}
+
+    % --- ARROW DOWN ---
+    \draw[->, thick, double] (box2.south) -- ++(0, -1) node[midway, right] {Propagate};
+
+    % --- STAGE 3: PREDICTION ---
+    \begin{scope}[yshift=-10cm]
+        \node[align=left, font=\bfseries] (title3) at (-2, 1.5) {3. Failure Prediction};
+
+        \node[block] (gnn) at (-2, 0) {GNN\\Propagation};
+        \node[block] (mlp) at (1, 0) {MLP\\Classifier};
+        \node[circle, draw, thick] (output) at (3.5, 0) {$P_{fail}$};
+
+        \draw[->] (gnn) -- (mlp);
+        \draw[->] (mlp) -- (output);
+
+        % Container Box
+        \node[draw, dashed, inner sep=10pt, fit=(title3)(gnn)(output)] (box3) {};
+    \end{scope}
+
+    \end{tikzpicture}
+    }
+    \caption{Overview of the GNN TCP approach. (1) A dependency graph connects tests to methods. (2) Changed methods are embedded into vectors. (3) A GNN propagates these features to predict test failure probability.}
+    \label{fig:gnn_simple}
+\end{figure}
+
+\subsection{Approach Details}
+Describe the details of each component in this subsection

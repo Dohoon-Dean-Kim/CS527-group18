@@ -1,0 +1,47 @@
+\section{Relate Work}
+
+% [proposal] list of all related work to the proposed idea. You should explain each related work briefly, in two or three sentences.
+
+% [1] R. Cheng, S. Wang, R. Jabbarvand, and D. Marinov, "Revisiting Test-Case Prioritization on Long-Running Test Suites"
+
+% According to the ISSTA '24 paper titled "Revisiting Test-Case Prioritization on Long-Running Test Suites," existing TCP often take over 6.5 hours to run test due to complex dependency issues in large-scale systems. This study introduces the LRTS dataset, which we utilize to demonstrate the efficiency improvement of GNN based approaches compared to baselines. In addition to these standard baselines, in this field, there is a recent shift toward integrating semantic code analysis with more complex methods to further push past performance limits.
+
+% [2] S. R. Kongarana, A. R. Akepogu, and R. R. P, "XGRL-TCP: An Explainable Graph-Based Reinforcement Learning Framework for Test Case Prioritization in CI"
+
+% [3] S. Sowmyadevi, A. Alphy, "Graph neural network-based mutation-aware regression test ordering using code dependency graphs and execution traces"
+
+% For example, XGRL-TCP utilizes reinforcement learning with Graph Attention Networks to achieve APFD of 89.3\%. Another recent approach leverages mutation information to enhance fault detection reaching an average APFD of 88.9\%. While these models achieve high accuracy, they often come with significant computational costs. Our project aims to strike this balance by efficiently capturing structural dependencies within the LRTS environment using R-GCN.
+
+% [4] Z. Feng et al., "CodeBERT: A Pre-Trained Model for Programming and Natural Languages"
+
+% To capture the semantic meaning of code, CodeBERT [Feng et al., 2020] introduces a pre-trained model that processes programming languages like natural text. We will use this technique to generate vector representations of code changes, capturing semantic details which are invisible to history-based techniques.
+
+Our research builds upon and contrasts with several key areas in regression testing and code representation. We position our empirical study in the context of the following related works:
+
+\textbf{Long-Running Test Suites and History-based TCP:} 
+According to the ISSTA '24 paper by Cheng et al., existing Test Case Prioritization (TCP) methods often face severe bottlenecks in large-scale systems, taking over 6.5 hours to run tests due to complex dependencies. Their study introduced the LRTS dataset and the LatestFail+CC baseline, which relies on execution history. While LatestFail+CC is fast, it fundamentally struggles with predicting failures in newly introduced code dependencies, leaving a gap for structural approaches.
+
+\textbf{Complex Graph and Reinforcement Learning Models:}
+To capture deeper code dependencies, there is a recent shift toward integrating more complex neural architectures. For instance, Kongarana et al. introduced XGRL-TCP, which utilizes reinforcement learning with Graph Attention Networks to achieve an APFD of 89.3\%. Similarly, Sowmyadevi and Alphy leveraged mutation information and execution traces with GNNs to reach a high average APFD of 88.9\%. While these models achieve high theoretical accuracy, they depend heavily on the flawless extraction of dynamic mutation or execution data and require massive computational overhead, making them difficult to scale in legacy LRTS environments.
+
+\textbf{Semantic Code Representation vs. Structural Features:}
+To capture the semantic meaning of source code, models like CodeBERT have been widely adopted to process programming languages like natural text. Initially, we considered using CodeBERT to generate dense vector representations of code changes. However, running a massive pre-trained transformer model to extract semantic embeddings for every commit introduces unacceptable inference overhead for a rapid CI gatekeeper. 
+
+\textbf{Our Positioning:} 
+Unlike the aforementioned approaches that push for maximum accuracy using heavy dynamic traces or massive semantic models, our project takes a fundamentally different path. We aim to strike a practical balance by utilizing a lightweight Graph Convolutional Network (GCN) that operates \textit{exclusively} on static call graphs and temporal CI metadata. By doing so, we empirically demonstrate the performance lower-bound of a purely static approach and highlight the critical extraction bottlenecks that heavy dynamic models often overlook in real-world industrial settings.
+
+\begin{thebibliography}{9}
+
+\bibitem{cheng2024}
+R. Cheng, S. Wang, R. Jabbarvand, and D. Marinov, "Revisiting Test-Case Prioritization on Long-Running Test Suites," in \textit{ISSTA}, 2024.
+
+\bibitem{kongarana2024}
+S. R. Kongarana, A. R. Akepogu, and R. R. P, "XGRL-TCP: An Explainable Graph-Based Reinforcement Learning Framework for Test Case Prioritization in CI," 2024.
+
+\bibitem{sowmyadevi2024}
+S. Sowmyadevi and A. Alphy, "Graph neural network-based mutation-aware regression test ordering using code dependency graphs and execution traces," 2024.
+
+\bibitem{feng2020}
+Z. Feng et al., "CodeBERT: A Pre-Trained Model for Programming and Natural Languages," in \textit{Findings of the Association for Computational Linguistics: EMNLP}, 2020.
+
+\end{thebibliography}
